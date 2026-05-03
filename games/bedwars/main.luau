@@ -7289,15 +7289,14 @@ run(function()
                             local pattern = getPyramid()
 
                             for i2, pos in pattern do
-                                -- Always use current foot-level position, snapped to grid, so blocks
-                                -- land on the ground and not at torso height or a stale location.
-                                local currentPos = entitylib.isAlive and roundPos(entitylib.character.RootPart.Position - Vector3.new(0, 3, 0)) or selfpos
-                                local placePos = roundPos(currentPos + pos)
-                                if getPlacedBlock(placePos) and i2 ~= 10 then continue end
+                                if getPlacedBlock(selfpos + pos) and i2 ~= 10 then continue end
                                 if SilentAim.Enabled then
-                                    lookAt = CFrame.new(placePos)
+                                    lookAt = CFrame.new(selfpos + pos)
+                                    task.wait()
+                                else
+                                    task.wait()
                                 end
-                                task.spawn(bedwars.placeBlock, placePos, block[1], false)
+                                task.spawn(bedwars.placeBlock, selfpos + pos, block[1], false)
                                 local delay = PlaceDelay:GetRandomValue()
                                 if delay > 0 then
                                     task.wait(delay)
@@ -7345,11 +7344,11 @@ run(function()
 
     PlaceDelay = BlockIn:CreateTwoSlider({
         Name = 'Place Delay',
-        Min = 0,
-        Max = 0.5,
-        DefaultMin = 0.05,
-        DefaultMax = 0.1,
-        Decimal = 100
+        Min = 1,
+        Max = 5,
+        DefaultMin = 0.1,
+        DefaultMax = 0.12,
+        Decimal = 5
     })
 
     SilentAim = BlockIn:CreateToggle({Name = 'SilentAim'})
@@ -9396,6 +9395,7 @@ run(function()
 	local InstantBreak
 	local LimitItem
 	local AutoTool = {Enabled = false}
+	local RayCheck = {Enabled = false}
 	local customlist, parts = {}, {}
 	
 	local function customHealthbar(self, blockRef, health, maxHealth, changeHealth, block)
@@ -9516,6 +9516,13 @@ run(function()
 				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
 				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
+
+				-- Ray Check: only break blocks the player is currently facing
+				if RayCheck.Enabled then
+					local lookVec = entitylib.character.RootPart.CFrame.LookVector
+					local toBlock = (v.Position - localPosition).Unit
+					if lookVec:Dot(toBlock) < 0.5 then continue end
+				end
 	
 				hit += 1
 				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
@@ -9678,6 +9685,10 @@ run(function()
 		end
 	})
 	AutoTool = Breaker:CreateToggle({Name = 'Auto Tool'})
+	RayCheck = Breaker:CreateToggle({
+		Name = 'Ray Check',
+		Tooltip = 'Only break blocks you are facing'
+	})
 	Bed = Breaker:CreateToggle({
 		Name = 'Break Bed',
 		Default = true
