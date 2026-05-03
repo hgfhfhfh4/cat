@@ -9505,26 +9505,28 @@ run(function()
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
 
-		-- When RayCheck is on, build a filtered list of only blocks we're facing,
-		-- then sort that. This prevents the sort picking a closer sideways block
-		-- that would then pass through the facing check by accident.
-		local list = tab
+		local list
 		if RayCheck.Enabled then
-			local camLook = (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1))
+			local camCF = gameCamera.CFrame
+			local camLook = (camCF.LookVector * Vector3.new(1, 0, 1))
 			if camLook.Magnitude > 0.01 then
 				camLook = camLook.Unit
+				local camPos = camCF.Position
 				list = {}
 				for _, v in tab do
-					local toBlock = ((v.Position - localPosition) * Vector3.new(1, 0, 1))
+					local toBlock = ((v.Position - camPos) * Vector3.new(1, 0, 1))
 					if toBlock.Magnitude > 0.01 then
-						-- only include blocks within 60 degrees in front of camera
 						local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
 						if angle <= 60 then
 							table.insert(list, v)
 						end
 					end
 				end
+			else
+				list = table.clone(tab)
 			end
+		else
+			list = table.clone(tab)
 		end
 
 		if #list > 1 then
