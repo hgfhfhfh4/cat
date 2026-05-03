@@ -7197,15 +7197,28 @@ run(function()
     end
 
     local function getPyramid()
+        -- Measure how many block-widths the character occupies so offsets
+        -- clear the hitbox even for oversized/kit characters (up to 2 blocks wide).
+        local charSize = 3
+        if entitylib.isAlive then
+            local hrp = entitylib.character and entitylib.character:FindFirstChild('HumanoidRootPart')
+            if hrp then
+                -- round up to nearest block grid unit (3 studs)
+                charSize = math.ceil(math.max(hrp.Size.X, hrp.Size.Z) / 3) * 3
+            end
+        end
+        -- offset is one block beyond the character's half-width
+        local o = charSize
+
         local pattern = {
-            Vector3.new(3, 0, 0),
-            Vector3.new(0, 0, 3),
-            Vector3.new(-3, 0, 0),
-            Vector3.new(0, 0, -3),
-            Vector3.new(3, 3, 0),
-            Vector3.new(0, 3, 3),
-            Vector3.new(-3, 3, 0),
-            Vector3.new(0, 3, -3),
+            Vector3.new( o,  0,  0),
+            Vector3.new( 0,  0,  o),
+            Vector3.new(-o,  0,  0),
+            Vector3.new( 0,  0, -o),
+            Vector3.new( o,  3,  0),
+            Vector3.new( 0,  3,  o),
+            Vector3.new(-o,  3,  0),
+            Vector3.new( 0,  3, -o),
         }
 
         local rng = Random.new()
@@ -7216,9 +7229,7 @@ run(function()
                 local dirX = (rng:NextInteger(0, 1) == 1 and 1 or -1)
                 local dirZ = (rng:NextInteger(0, 1) == 1 and 1 or -1)
                 local y = ({0, 3})[rng:NextInteger(1, 2)]
-
-                local offset = Vector3.new(3 * dirX, y, 3 * dirZ)
-
+                local offset = Vector3.new(o * dirX, y, o * dirZ)
                 if table.find(pattern, offset) then continue end
                 table.insert(pattern, offset)
             end
@@ -7226,7 +7237,7 @@ run(function()
 
         local axis = rng:NextInteger(0,1) == 1 and 'X' or 'Z'
         local dir = rng:NextInteger(0,1) == 1 and 1 or -1
-        local extraPos = axis == 'X' and Vector3.new(3 * dir, 6, 0) or Vector3.new(0, 6, 3 * dir)
+        local extraPos = axis == 'X' and Vector3.new(o * dir, 6, 0) or Vector3.new(0, 6, o * dir)
         table.insert(pattern, extraPos)
         table.insert(pattern, Vector3.new(0, 6, 0))
 
