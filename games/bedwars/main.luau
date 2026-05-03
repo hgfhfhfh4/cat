@@ -9504,25 +9504,37 @@ run(function()
 	
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
-		if #tab > 1 then
+
+		-- When RayCheck is on, build a filtered list of only blocks we're facing,
+		-- then sort that. This prevents the sort picking a closer sideways block
+		-- that would then pass through the facing check by accident.
+		local list = tab
+		if RayCheck.Enabled then
+			local lookVec = (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
+			list = {}
+			for _, v in tab do
+				local toBlock = ((v.Position - localPosition) * Vector3.new(1, 0, 1))
+				if toBlock.Magnitude > 0 then
+					if lookVec:Dot(toBlock.Unit) >= 0.7 then
+						table.insert(list, v)
+					end
+				end
+			end
+		end
+
+		if #list > 1 then
 			pcall(function()
-				table.sort(tab, function(a, b)
+				table.sort(list, function(a, b)
 					return (localPosition - a.Position).Magnitude <= (localPosition - b.Position).Magnitude
 				end)
 			end)
 		end
-		for _, v in tab do
+
+		for _, v in list do
 			if (v.Position - localPosition).Magnitude < Range.Value and bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
 				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
 				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-
-				-- Ray Check: only break blocks the player is currently facing
-				if RayCheck.Enabled then
-					local lookVec = entitylib.character.RootPart.CFrame.LookVector
-					local toBlock = (v.Position - localPosition).Unit
-					if lookVec:Dot(toBlock) < 0.5 then continue end
-				end
 	
 				hit += 1
 				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
