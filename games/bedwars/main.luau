@@ -1148,29 +1148,6 @@ run(function()
 			local dblock, dpos = getPlacedBlock(lookupPos)
 			if not dblock then return end
 
-			-- Line-of-sight check: walk from player toward the block in grid steps.
-			-- If any intermediate grid cell contains a placed block that isn't the target, abort.
-			do
-				local blockStore = bedwars.BlockController:getStore()
-				local origin = entitylib.character.RootPart.Position
-				local targetGridPos = bedwars.BlockController:getBlockPosition(lookupPos)
-				local diff = lookupPos - origin
-				local steps = math.max(math.ceil(diff.Magnitude / 3), 1)
-				local blocked = false
-				for i = 1, steps - 1 do
-					local sample = origin + diff * (i / steps)
-					local gridCell = bedwars.BlockController:getBlockPosition(sample)
-					if gridCell ~= targetGridPos then
-						local occupant = blockStore:getBlockAt(gridCell)
-						if occupant and occupant ~= dblock then
-							blocked = true
-							break
-						end
-					end
-				end
-				if blocked then return nil end
-			end
-
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
 				local breaktype = bedwars.ItemMeta[dblock.Name].block.breakType
 				local tool = store.tools[breaktype]
