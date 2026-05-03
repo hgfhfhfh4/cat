@@ -1131,19 +1131,22 @@ run(function()
 			local dblock, dpos = getPlacedBlock(pos)
 			if not dblock then return end
 
-			-- Line-of-sight check: ensure no solid block is between the player and the target position.
-			-- This prevents the breaker from sending damage requests through walls/blocks, which is
-			-- extremely obvious to anticheat and other players.
+			-- Line-of-sight check: ensure no placed block is between the player and the target.
+			-- Prevents breaking through walls, which is blatant.
 			do
 				local origin = entitylib.character.RootPart.Position
 				local direction = (pos - origin)
 				local rayParams = RaycastParams.new()
-				rayParams.FilterDescendantsInstances = {entitylib.character}
+				-- Exclude the player AND the target block (including all its child parts/meshes)
+				rayParams.FilterDescendantsInstances = {entitylib.character, dblock}
 				rayParams.FilterType = Enum.RaycastFilterType.Exclude
 				local rayResult = workspace:Raycast(origin, direction * 0.95, rayParams)
-				-- If the ray hit something that is NOT our target block, there's an obstruction.
-				if rayResult and rayResult.Instance ~= dblock and (not rayResult.Instance or rayResult.Instance:FindFirstAncestor(dblock.Name) ~= dblock) then
-					return nil
+				-- Only bail if the ray hit something that is itself a placed block in the block store
+				if rayResult then
+					local hitBlock = getPlacedBlock(rayResult.Instance.Position)
+					if hitBlock then
+						return nil
+					end
 				end
 			end
 
@@ -9652,7 +9655,7 @@ run(function()
 		Default = 'Health'
 	})
 	Range = Breaker:CreateSlider({
-		Name = 'Break range H',
+		Name = 'Break range',
 		Min = 1,
 		Max = 30,
 		Default = 30,
