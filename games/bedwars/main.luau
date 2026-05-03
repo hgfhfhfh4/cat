@@ -7196,25 +7196,51 @@ run(function()
         return
     end
 
-    local function getShell()
-        -- Build a solid ring around the player: all cells in a 3x3 footprint border
-        -- at ground level (y=0) and mid level (y=3), plus the ceiling (y=6).
-        -- This guarantees full coverage regardless of character size.
-        local pattern = {}
-        for x = -3, 3, 3 do
-            for z = -3, 3, 3 do
-                -- skip the center column (that's where the player stands)
-                if x == 0 and z == 0 then continue end
-                table.insert(pattern, Vector3.new(x, 0, z))
-                table.insert(pattern, Vector3.new(x, 3, z))
+    local function getPyramid()
+        -- Measure how many block-widths the character occupies so offsets
+        -- clear the hitbox even for oversized/kit characters (up to 2 blocks wide).
+        local charSize = 3
+        if entitylib.isAlive then
+            local hrp = entitylib.character and entitylib.character:FindFirstChild('HumanoidRootPart')
+            if hrp then
+                -- round up to nearest block grid unit (3 studs)
+                charSize = math.ceil(math.max(hrp.Size.X, hrp.Size.Z) / 3) * 3
             end
         end
-        -- ceiling blocks directly above
-        for x = -3, 3, 3 do
-            for z = -3, 3, 3 do
-                table.insert(pattern, Vector3.new(x, 6, z))
+        -- offset is one block beyond the character's half-width
+        local o = charSize
+
+        local pattern = {
+            Vector3.new( o,  0,  0),
+            Vector3.new( 0,  0,  o),
+            Vector3.new(-o,  0,  0),
+            Vector3.new( 0,  0, -o),
+            Vector3.new( o,  3,  0),
+            Vector3.new( 0,  3,  o),
+            Vector3.new(-o,  3,  0),
+            Vector3.new( 0,  3, -o),
+        }
+
+        local rng = Random.new()
+
+        if rng:NextNumber() < 0.95 then
+            local extraCount = rng:NextInteger(1, 3)
+            for _ = 1, extraCount do
+                local dirX = (rng:NextInteger(0, 1) == 1 and 1 or -1)
+                local dirZ = (rng:NextInteger(0, 1) == 1 and 1 or -1)
+                local y = ({0, 3})[rng:NextInteger(1, 2)]
+                local offset = Vector3.new(o * dirX, y, o * dirZ)
+                if table.find(pattern, offset) then continue end
+                table.insert(pattern, offset)
             end
         end
+
+        local axis = rng:NextInteger(0,1) == 1 and 'X' or 'Z'
+        local dir = rng:NextInteger(0,1) == 1 and 1 or -1
+        local extraPos = axis == 'X' and Vector3.new(o * dir, 6, 0) or Vector3.new(0, 6, o * dir)
+        table.insert(pattern, extraPos)
+        table.insert(pattern, Vector3.new(0, 6, 0))
+
         return pattern
     end
 
@@ -7271,27 +7297,18 @@ run(function()
                                     break
                                 end
                             end
-                            local pattern = getShell()
+                            local pattern = getPyramid()
 
                             for i2, pos in pattern do
                                 -- Always use current foot-level position, snapped to grid, so blocks
                                 -- land on the ground and not at torso height or a stale location.
                                 local currentPos = entitylib.isAlive and roundPos(entitylib.character.RootPart.Position - Vector3.new(0, 3, 0)) or selfpos
                                 local placePos = roundPos(currentPos + pos)
-                                if getPlacedBlock(placePos) then continue end
+                                if getPlacedBlock(placePos) and i2 ~= 10 then continue end
                                 if SilentAim.Enabled then
                                     lookAt = CFrame.new(placePos)
                                 end
                                 task.spawn(bedwars.placeBlock, placePos, block[1], false)
-                                -- Wait for server to confirm the placement before continuing.
-                                -- This prevents ghost blocks at low place delays.
-                                local confirmed = false
-                                local conn = vapeEvents.PlaceBlockEvent.Event:Connect(function()
-                                    confirmed = true
-                                end)
-                                local timeout = tick() + 1
-                                repeat task.wait() until confirmed or tick() > timeout
-                                conn:Disconnect()
                                 local delay = PlaceDelay:GetRandomValue()
                                 if delay > 0 then
                                     task.wait(delay)
