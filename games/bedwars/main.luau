@@ -1105,14 +1105,28 @@ run(function()
 		local positions = (handler and handler:getContainedPositions(block) or {block.Position / 3})
 
 		if not canDebug then
-			pos = positions[2] or positions[1]
-			target = positions[2]
-			path = {}
-			if positions[2] then
-				path[positions[2]] = positions[2] - Vector3.new(0, 3, 0)
+			local localPosition = entitylib.character.RootPart.Position
+			local blockStore = bedwars.BlockController:getStore()
+			for _, v in positions do
+				local worldPos = v * 3
+				for _, side in sides do
+					local neighbor = v + side / 3
+					if not blockStore:getBlockAt(neighbor) then
+						local airWorld = neighbor * 3
+						local dmag = (localPosition - airWorld).Magnitude
+						if dmag < mag then
+							mag = dmag
+							pos = airWorld
+							target = worldPos
+							path = {[worldPos] = neighbor * 3}
+						end
+					end
+				end
 			end
-
-			path[positions[1]] = positions[1] - Vector3.new(0, 3, 0)
+			if not pos then
+				-- fallback: no open neighbor found, skip
+				return nil
+			end
 		else
 			for _, v in positions do
 				local dpos, dcost, dpath = calculatePath(block, v * 3, breakmethods[sorting] or breakmethods.Health, angle)
@@ -1128,26 +1142,33 @@ run(function()
 
 		if pos then
 			if (entitylib.character.RootPart.Position - pos).Magnitude > 30 then return end
-			local dblock, dpos = getPlacedBlock(pos)
+			-- pos is the air cell we break from; target is the actual block grid position (world coords)
+			-- look up the block at the target position, not the air cell
+			local lookupPos = target or pos
+			local dblock, dpos = getPlacedBlock(lookupPos)
 			if not dblock then return end
 
-			-- Line-of-sight check: ensure no placed block is between the player and the target.
-			-- Prevents breaking through walls, which is blatant.
+			-- Line-of-sight check: walk from player toward the block in grid steps.
+			-- If any intermediate grid cell contains a placed block that isn't the target, abort.
 			do
+				local blockStore = bedwars.BlockController:getStore()
 				local origin = entitylib.character.RootPart.Position
-				local direction = (pos - origin)
-				local rayParams = RaycastParams.new()
-				-- Exclude the player AND the target block (including all its child parts/meshes)
-				rayParams.FilterDescendantsInstances = {entitylib.character, dblock}
-				rayParams.FilterType = Enum.RaycastFilterType.Exclude
-				local rayResult = workspace:Raycast(origin, direction * 0.95, rayParams)
-				-- Only bail if the ray hit something that is itself a placed block in the block store
-				if rayResult then
-					local hitBlock = getPlacedBlock(rayResult.Instance.Position)
-					if hitBlock then
-						return nil
+				local targetGridPos = bedwars.BlockController:getBlockPosition(lookupPos)
+				local diff = lookupPos - origin
+				local steps = math.max(math.ceil(diff.Magnitude / 3), 1)
+				local blocked = false
+				for i = 1, steps - 1 do
+					local sample = origin + diff * (i / steps)
+					local gridCell = bedwars.BlockController:getBlockPosition(sample)
+					if gridCell ~= targetGridPos then
+						local occupant = blockStore:getBlockAt(gridCell)
+						if occupant and occupant ~= dblock then
+							blocked = true
+							break
+						end
 					end
 				end
+				if blocked then return nil end
 			end
 
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
