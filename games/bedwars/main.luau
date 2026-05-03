@@ -1131,6 +1131,22 @@ run(function()
 			local dblock, dpos = getPlacedBlock(pos)
 			if not dblock then return end
 
+			-- Line-of-sight check: ensure no solid block is between the player and the target position.
+			-- This prevents the breaker from sending damage requests through walls/blocks, which is
+			-- extremely obvious to anticheat and other players.
+			do
+				local origin = entitylib.character.RootPart.Position
+				local direction = (pos - origin)
+				local rayParams = RaycastParams.new()
+				rayParams.FilterDescendantsInstances = {entitylib.character}
+				rayParams.FilterType = Enum.RaycastFilterType.Exclude
+				local rayResult = workspace:Raycast(origin, direction * 0.95, rayParams)
+				-- If the ray hit something that is NOT our target block, there's an obstruction.
+				if rayResult and rayResult.Instance ~= dblock and (not rayResult.Instance or rayResult.Instance:FindFirstAncestor(dblock.Name) ~= dblock) then
+					return nil
+				end
+			end
+
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
 				local breaktype = bedwars.ItemMeta[dblock.Name].block.breakType
 				local tool = store.tools[breaktype]
@@ -9529,8 +9545,23 @@ run(function()
 						currentnode = path[currentnode]
 					end
 				end
-	
-				task.wait(InstantBreak.Enabled and (store.damageBlockFail > tick() and 4.5 or 0) or BreakSpeed.Value)
+
+				-- Use natural game break cooldown when AutoTool is enabled and a tool is equipped for this block,
+				-- so the tool's speed bonus isn't overwritten by the manual BreakSpeed slider.
+				local naturalWait do
+					if InstantBreak.Enabled then
+						naturalWait = store.damageBlockFail > tick() and 4.5 or 0
+					elseif AutoTool.Enabled then
+						local breaktype = v and bedwars.ItemMeta[v.Name] and bedwars.ItemMeta[v.Name].block and bedwars.ItemMeta[v.Name].block.breakType
+						local hasTool = breaktype and store.tools[breaktype]
+						-- If a matching tool exists, let the game's own cooldown govern timing (0.3s default),
+						-- which the tool naturally reduces. Only fall back to BreakSpeed if no tool is matched.
+						naturalWait = hasTool and 0.3 or BreakSpeed.Value
+					else
+						naturalWait = BreakSpeed.Value
+					end
+				end
+				task.wait(naturalWait)
 	
 				return true
 			end
@@ -9621,7 +9652,7 @@ run(function()
 		Default = 'Health'
 	})
 	Range = Breaker:CreateSlider({
-		Name = 'Break range',
+		Name = 'Break range H',
 		Min = 1,
 		Max = 30,
 		Default = 30,
