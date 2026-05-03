@@ -7201,10 +7201,16 @@ run(function()
         -- clear the hitbox even for oversized/kit characters (up to 2 blocks wide).
         local charSize = 3
         if entitylib.isAlive then
-            local hrp = entitylib.character and entitylib.character:FindFirstChild('HumanoidRootPart')
-            if hrp then
-                -- round up to nearest block grid unit (3 studs)
-                charSize = math.ceil(math.max(hrp.Size.X, hrp.Size.Z) / 3) * 3
+            local char = lplr.Character
+            if char then
+                -- Use the full model bounding box so large kits (Elder Tree etc.)
+                -- are measured correctly, not just the HumanoidRootPart size.
+                local ok, cf, size = pcall(function()
+                    return char:GetBoundingBox()
+                end)
+                if ok and size then
+                    charSize = math.ceil(math.max(size.X, size.Z) / 3) * 3
+                end
             end
         end
         -- offset is one block beyond the character's half-width
