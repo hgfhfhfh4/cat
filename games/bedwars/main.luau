@@ -9510,13 +9510,18 @@ run(function()
 		-- that would then pass through the facing check by accident.
 		local list = tab
 		if RayCheck.Enabled then
-			local lookVec = (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
-			list = {}
-			for _, v in tab do
-				local toBlock = ((v.Position - localPosition) * Vector3.new(1, 0, 1))
-				if toBlock.Magnitude > 0 then
-					if lookVec:Dot(toBlock.Unit) >= 0.7 then
-						table.insert(list, v)
+			local camLook = (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1))
+			if camLook.Magnitude > 0.01 then
+				camLook = camLook.Unit
+				list = {}
+				for _, v in tab do
+					local toBlock = ((v.Position - localPosition) * Vector3.new(1, 0, 1))
+					if toBlock.Magnitude > 0.01 then
+						-- only include blocks within 60 degrees in front of camera
+						local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
+						if angle <= 60 then
+							table.insert(list, v)
+						end
 					end
 				end
 			end
