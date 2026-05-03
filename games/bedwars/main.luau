@@ -1105,28 +1105,13 @@ run(function()
 		local positions = (handler and handler:getContainedPositions(block) or {block.Position / 3})
 
 		if not canDebug then
-			local localPosition = entitylib.character.RootPart.Position
-			local blockStore = bedwars.BlockController:getStore()
-			for _, v in positions do
-				local worldPos = v * 3
-				for _, side in sides do
-					local neighbor = v + side / 3
-					if not blockStore:getBlockAt(neighbor) then
-						local airWorld = neighbor * 3
-						local dmag = (localPosition - airWorld).Magnitude
-						if dmag < mag then
-							mag = dmag
-							pos = airWorld
-							target = worldPos
-							path = {[worldPos] = neighbor * 3}
-						end
-					end
-				end
+			pos = positions[2] or positions[1]
+			target = positions[2]
+			path = {}
+			if positions[2] then
+				path[positions[2]] = positions[2] - Vector3.new(0, 3, 0)
 			end
-			if not pos then
-				-- fallback: no open neighbor found, skip
-				return nil
-			end
+			path[positions[1]] = positions[1] - Vector3.new(0, 3, 0)
 		else
 			for _, v in positions do
 				local dpos, dcost, dpath = calculatePath(block, v * 3, breakmethods[sorting] or breakmethods.Health, angle)
@@ -1142,10 +1127,7 @@ run(function()
 
 		if pos then
 			if (entitylib.character.RootPart.Position - pos).Magnitude > 30 then return end
-			-- pos is the air cell we break from; target is the actual block grid position (world coords)
-			-- look up the block at the target position, not the air cell
-			local lookupPos = target or pos
-			local dblock, dpos = getPlacedBlock(lookupPos)
+			local dblock, dpos = getPlacedBlock(pos)
 			if not dblock then return end
 
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
