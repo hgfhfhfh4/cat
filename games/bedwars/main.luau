@@ -9561,34 +9561,7 @@ run(function()
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
 
-		-- Clone so sort never mutates the original collection
 		local list = table.clone(tab)
-
-		-- RayCheck: filter end-targets (beds/teslas) to only those the camera is facing.
-		-- This only affects which TARGET to pursue — calculatePath still breaks through
-		-- any walls on the way to that target normally.
-		if RayCheck.Enabled then
-			local camCF = gameCamera.CFrame
-			local camLook = camCF.LookVector * Vector3.new(1, 0, 1)
-			if camLook.Magnitude > 0.01 then
-				camLook = camLook.Unit
-				local camPos = camCF.Position
-				local filtered = {}
-				for _, v in list do
-					-- Use closest point on the block to the camera ray, not just v.Position
-					local toBlock = (v.Position - camPos) * Vector3.new(1, 0, 1)
-					if toBlock.Magnitude > 0.01 then
-						local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
-						if angle <= 45 then
-							table.insert(filtered, v)
-						end
-					end
-				end
-				list = filtered
-			end
-		end
-
-		if #list == 0 then return false end
 
 		if #list > 1 then
 			pcall(function()
@@ -9605,7 +9578,8 @@ run(function()
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
 
 				hit += 1
-				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
+				local breakAngle = RayCheck.Enabled and 90 or Angle.Value
+				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, breakAngle)
 				if path then
 					local currentnode = target
 					for _, part in parts do
