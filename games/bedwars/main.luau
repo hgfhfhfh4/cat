@@ -7317,18 +7317,8 @@ run(function()
                                     lookAt = CFrame.new(placePos)
                                 end
                                 task.spawn(bedwars.placeBlock, placePos, block[1], false)
-                                -- Wait for server confirmation to prevent ghost blocks
-                                local confirmed = false
-                                local conn = vapeEvents.PlaceBlockEvent.Event:Connect(function()
-                                    confirmed = true
-                                end)
-                                local timeout = tick() + 1
-                                repeat task.wait() until confirmed or tick() > timeout
-                                conn:Disconnect()
                                 local delay = PlaceDelay:GetRandomValue()
-                                if delay > 0 then
-                                    task.wait(delay)
-                                end
+                                task.wait(math.max(delay, 0))
                                 lookAt = nil
                             end
                         end
