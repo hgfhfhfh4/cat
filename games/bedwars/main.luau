@@ -4133,26 +4133,16 @@ run(function()
 										local switched = switchItem(item.tool)
 	
 										task.spawn(function()
-											-- Animation: play the bow draw animation before firing
-											if AnimationToggle.Enabled then
-												local char = lplr.Character
-												local humanoid = char and char:FindFirstChildOfClass('Humanoid')
-												local animator = humanoid and humanoid:FindFirstChildOfClass('Animator')
-												local drawAnimId = itemMeta.animations and itemMeta.animations.draw
-												if animator and drawAnimId then
-													local anim = Instance.new('Animation')
-													anim.AnimationId = drawAnimId
-													local track = animator:LoadAnimation(anim)
-													track:Play()
-													task.wait(0.2)
-													track:Stop()
-													anim:Destroy()
-												end
-											end
 											local dir, id = CFrame.lookAt(pos, calc).LookVector, httpService:GenerateGUID(true)
 											local shootPosition = (CFrame.new(pos, calc) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ))).Position
-											bedwars.ProjectileController:createLocalProjectile(meta, ammo, projectile, shootPosition, id, dir * projSpeed, {drawDurationSeconds = 1})
-											local res = projectileRemote:InvokeServer(item.tool, ammo, projectile, shootPosition, pos, dir * projSpeed, id, {drawDurationSeconds = 1, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - 0.045)
+											local drawDuration = AnimationToggle.Enabled and (meta.drawDurationSeconds or 1) or 0
+											-- Create the local projectile first so the draw animation plays on the viewmodel
+											bedwars.ProjectileController:createLocalProjectile(meta, ammo, projectile, shootPosition, id, dir * projSpeed, {drawDurationSeconds = drawDuration})
+											-- Wait the full draw before telling the server to fire
+											if drawDuration > 0 then
+												task.wait(drawDuration)
+											end
+											local res = projectileRemote:InvokeServer(item.tool, ammo, projectile, shootPosition, pos, dir * projSpeed, id, {drawDurationSeconds = drawDuration, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - 0.045)
 											if not res then
 												FireDelays[item.itemType] = tick()
 											else
