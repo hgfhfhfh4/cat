@@ -4067,6 +4067,8 @@ run(function()
 	local Targets
 	local Range
 	local List
+	local RequireBow
+	local AnimationToggle
 	local rayCheck = RaycastParams.new()
 	rayCheck.FilterType = Enum.RaycastFilterType.Include
 	local projectileRemote = {InvokeServer = function(self, ...) end}
@@ -4120,6 +4122,8 @@ run(function()
 							for _, data in getProjectiles() do
 								local item, ammo, projectile, itemMeta = unpack(data)
 								if (FireDelays[item.itemType] or 0) < tick() then
+									-- Require Bow: only fire if the matching weapon is currently held
+									if RequireBow.Enabled and (not store.hand.tool or store.hand.tool ~= item.tool) then continue end
 									rayCheck.FilterDescendantsInstances = {workspace.Map}
 									local meta = bedwars.ProjectileMeta[projectile]
 									local projSpeed, gravity = meta.launchVelocity, meta.gravitationalAcceleration or 196.2
@@ -4129,6 +4133,22 @@ run(function()
 										local switched = switchItem(item.tool)
 	
 										task.spawn(function()
+											-- Animation: play the bow draw animation before firing
+											if AnimationToggle.Enabled then
+												local char = lplr.Character
+												local humanoid = char and char:FindFirstChildOfClass('Humanoid')
+												local animator = humanoid and humanoid:FindFirstChildOfClass('Animator')
+												local drawAnimId = itemMeta.animations and itemMeta.animations.draw
+												if animator and drawAnimId then
+													local anim = Instance.new('Animation')
+													anim.AnimationId = drawAnimId
+													local track = animator:LoadAnimation(anim)
+													track:Play()
+													task.wait(0.2)
+													track:Stop()
+													anim:Destroy()
+												end
+											end
 											local dir, id = CFrame.lookAt(pos, calc).LookVector, httpService:GenerateGUID(true)
 											local shootPosition = (CFrame.new(pos, calc) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ))).Position
 											bedwars.ProjectileController:createLocalProjectile(meta, ammo, projectile, shootPosition, id, dir * projSpeed, {drawDurationSeconds = 1})
@@ -4175,6 +4195,14 @@ run(function()
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
+	})
+	RequireBow = ProjectileAura:CreateToggle({
+		Name = 'Require Bow',
+		Tooltip = 'Only fire when the bow is held'
+	})
+	AnimationToggle = ProjectileAura:CreateToggle({
+		Name = 'Animation',
+		Tooltip = 'Play bow draw animation before firing'
 	})
 end)
 	
