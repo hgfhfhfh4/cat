@@ -1052,19 +1052,8 @@ run(function()
                     continue
                 end
 
-                if angle < 360 then
-                    local lookDir = getgenv().breakerRayCheck
-                        and (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1))
-                        or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
-                    if lookDir.Magnitude > 0.01 then lookDir = lookDir.Unit end
-                    -- Check direction from player to this neighbor block (not node-to-neighbor)
-                    -- so only blocks actually in front of the player are considered
-                    local toNeighbor = (block.Position - localPosition) * Vector3.new(1, 0, 1)
-                    if toNeighbor.Magnitude > 0.01 then
-                        local neighborAngle = math.acos(math.clamp(lookDir:Dot(toNeighbor.Unit), -1, 1))
-                        if neighborAngle > (math.rad(angle) / 2) then continue end
-                    end
-                end
+                local plrangle = math.acos(math.clamp((entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)):Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit), -1, 1))
+                if plrangle > (math.rad(angle) / 2) then continue end
 
                 local curdist = findmag(block, side) + node[1]
                 if curdist < (distances[side] or math.huge) then
@@ -9589,21 +9578,33 @@ run(function()
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
 
 			hit += 1
-				getgenv().breakerRayCheck = RayCheck.Enabled
+
 				if RayCheck.Enabled then
-					-- Clear path cache so it recalculates with camera direction every tick
-					table.clear(cache)
-				end
-				local breakAngle = RayCheck.Enabled and 90 or Angle.Value
-				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, breakAngle)
-				if path then
-					local currentnode = target
-					for _, part in parts do
-						part.Position = currentnode or Vector3.zero
-						if currentnode then
-							part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+					-- Raycast straight from camera in look direction.
+					-- Break whatever placed block is hit first — this is exactly what a legit player does.
+					local camCF = gameCamera.CFrame
+					local rayParams = RaycastParams.new()
+					rayParams.FilterDescendantsInstances = {lplr.Character}
+					rayParams.FilterType = Enum.RaycastFilterType.Exclude
+					local rayResult = workspace:Raycast(camCF.Position, camCF.LookVector * Range.Value, rayParams)
+					if rayResult then
+						local hitBlock, hitPos = getPlacedBlock(rayResult.Instance.Position)
+						if hitBlock and bedwars.BlockController:isBlockBreakable({blockPosition = hitPos}, lplr) then
+							bedwars.breakBlock(hitBlock, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, 360)
 						end
-						currentnode = path[currentnode]
+					end
+				else
+					getgenv().breakerRayCheck = false
+					local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
+					if path then
+						local currentnode = target
+						for _, part in parts do
+							part.Position = currentnode or Vector3.zero
+							if currentnode then
+								part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+							end
+							currentnode = path[currentnode]
+						end
 					end
 				end
 
