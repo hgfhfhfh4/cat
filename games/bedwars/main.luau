@@ -7234,40 +7234,22 @@ run(function()
         return
     end
 
-    local function getPyramid()
-        local pattern = {
-            Vector3.new(3, 0, 0),
-            Vector3.new(0, 0, 3),
-            Vector3.new(-3, 0, 0),
-            Vector3.new(0, 0, -3),
-            Vector3.new(3, 3, 0),
-            Vector3.new(0, 3, 3),
-            Vector3.new(-3, 3, 0),
-            Vector3.new(0, 3, -3),
-        }
-
-        local rng = Random.new()
-
-        if rng:NextNumber() < 0.95 then
-            local extraCount = rng:NextInteger(1, 3)
-            for _ = 1, extraCount do
-                local dirX = (rng:NextInteger(0, 1) == 1 and 1 or -1)
-                local dirZ = (rng:NextInteger(0, 1) == 1 and 1 or -1)
-                local y = ({0, 3})[rng:NextInteger(1, 2)]
-
-                local offset = Vector3.new(3 * dirX, y, 3 * dirZ)
-
-                if table.find(pattern, offset) then continue end
-                table.insert(pattern, offset)
+    local function getShell()
+        -- Full 3x3 border at ground (y=0) and mid (y=3), plus ceiling (y=6).
+        -- All offsets are relative to foot level (already adjusted below).
+        local pattern = {}
+        for x = -3, 3, 3 do
+            for z = -3, 3, 3 do
+                if x == 0 and z == 0 then continue end
+                table.insert(pattern, Vector3.new(x, 0, z))
+                table.insert(pattern, Vector3.new(x, 3, z))
             end
         end
-
-        local axis = rng:NextInteger(0,1) == 1 and 'X' or 'Z'
-        local dir = rng:NextInteger(0,1) == 1 and 1 or -1
-        local extraPos = axis == 'X' and Vector3.new(3 * dir, 6, 0) or Vector3.new(0, 6, 3 * dir)
-        table.insert(pattern, extraPos)
-        table.insert(pattern, Vector3.new(0, 6, 0))
-
+        for x = -3, 3, 3 do
+            for z = -3, 3, 3 do
+                table.insert(pattern, Vector3.new(x, 6, z))
+            end
+        end
         return pattern
     end
 
@@ -7324,17 +7306,25 @@ run(function()
                                     break
                                 end
                             end
-                            local pattern = getPyramid()
+                            local pattern = getShell()
 
                             for i2, pos in pattern do
-                                if getPlacedBlock(selfpos + pos) and i2 ~= 10 then continue end
+                                -- Use foot-level origin so blocks land on the ground, not at torso height
+                                local footPos = roundPos(entitylib.character.RootPart.Position - Vector3.new(0, 3, 0))
+                                local placePos = footPos + pos
+                                if getPlacedBlock(placePos) then continue end
                                 if SilentAim.Enabled then
-                                    lookAt = CFrame.new(selfpos + pos)
-                                    task.wait()
-                                else
-                                    task.wait()
+                                    lookAt = CFrame.new(placePos)
                                 end
-                                task.spawn(bedwars.placeBlock, selfpos + pos, block[1], false)
+                                task.spawn(bedwars.placeBlock, placePos, block[1], false)
+                                -- Wait for server confirmation to prevent ghost blocks
+                                local confirmed = false
+                                local conn = vapeEvents.PlaceBlockEvent.Event:Connect(function()
+                                    confirmed = true
+                                end)
+                                local timeout = tick() + 1
+                                repeat task.wait() until confirmed or tick() > timeout
+                                conn:Disconnect()
                                 local delay = PlaceDelay:GetRandomValue()
                                 if delay > 0 then
                                     task.wait(delay)
@@ -7382,11 +7372,11 @@ run(function()
 
     PlaceDelay = BlockIn:CreateTwoSlider({
         Name = 'Place Delay',
-        Min = 1,
-        Max = 5,
-        DefaultMin = 0.1,
-        DefaultMax = 0.12,
-        Decimal = 5
+        Min = 0,
+        Max = 0.5,
+        DefaultMin = 0.05,
+        DefaultMax = 0.1,
+        Decimal = 100
     })
 
     SilentAim = BlockIn:CreateToggle({Name = 'SilentAim'})
