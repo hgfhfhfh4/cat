@@ -1130,32 +1130,6 @@ run(function()
 			local dblock, dpos = getPlacedBlock(pos)
 			if not dblock then return end
 
-			-- LOS check: verify the actual block being hit (dblock) has at least
-			-- one exposed face reachable from the player. This allows breaking through
-			-- layered defenses correctly (path block by block) while preventing
-			-- breaking blocks that are physically unreachable from the player's position.
-			do
-				local origin = entitylib.character.RootPart.Position + Vector3.new(0, 1.5, 0)
-				local losParams = RaycastParams.new()
-				losParams.FilterDescendantsInstances = {lplr.Character, dblock}
-				losParams.FilterType = Enum.RaycastFilterType.Exclude
-				local faceOffsets = {
-					Vector3.new( 1.5, 0, 0), Vector3.new(-1.5, 0, 0),
-					Vector3.new(0,  1.5, 0), Vector3.new(0, -1.5, 0),
-					Vector3.new(0, 0,  1.5), Vector3.new(0, 0, -1.5),
-				}
-				local reachable = false
-				for _, offset in faceOffsets do
-					local facePos = dblock.Position + offset
-					local dir = facePos - origin
-					if not workspace:Raycast(origin, dir, losParams) then
-						reachable = true
-						break
-					end
-				end
-				if not reachable then return end
-			end
-
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
 				local breaktype = bedwars.ItemMeta[dblock.Name].block.breakType
 				local tool = store.tools[breaktype]
@@ -9587,29 +9561,34 @@ run(function()
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
 
-		local list
+		-- Clone so sort never mutates the original collection
+		local list = table.clone(tab)
+
+		-- RayCheck: filter end-targets (beds/teslas) to only those the camera is facing.
+		-- This only affects which TARGET to pursue — calculatePath still breaks through
+		-- any walls on the way to that target normally.
 		if RayCheck.Enabled then
 			local camCF = gameCamera.CFrame
-			local camLook = (camCF.LookVector * Vector3.new(1, 0, 1))
+			local camLook = camCF.LookVector * Vector3.new(1, 0, 1)
 			if camLook.Magnitude > 0.01 then
 				camLook = camLook.Unit
 				local camPos = camCF.Position
-				list = {}
-				for _, v in tab do
-					local toBlock = ((v.Position - camPos) * Vector3.new(1, 0, 1))
+				local filtered = {}
+				for _, v in list do
+					-- Use closest point on the block to the camera ray, not just v.Position
+					local toBlock = (v.Position - camPos) * Vector3.new(1, 0, 1)
 					if toBlock.Magnitude > 0.01 then
 						local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
-						if angle <= 60 then
-							table.insert(list, v)
+						if angle <= 45 then
+							table.insert(filtered, v)
 						end
 					end
 				end
-			else
-				list = table.clone(tab)
+				list = filtered
 			end
-		else
-			list = table.clone(tab)
 		end
+
+		if #list == 0 then return false end
 
 		if #list > 1 then
 			pcall(function()
@@ -9624,7 +9603,7 @@ run(function()
 				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
 				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-	
+
 				hit += 1
 				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
 				if path then
@@ -9638,27 +9617,23 @@ run(function()
 					end
 				end
 
-				-- Use natural game break cooldown when AutoTool is enabled and a tool is equipped for this block,
-				-- so the tool's speed bonus isn't overwritten by the manual BreakSpeed slider.
 				local naturalWait do
 					if InstantBreak.Enabled then
 						naturalWait = store.damageBlockFail > tick() and 4.5 or 0
 					elseif AutoTool.Enabled then
 						local breaktype = v and bedwars.ItemMeta[v.Name] and bedwars.ItemMeta[v.Name].block and bedwars.ItemMeta[v.Name].block.breakType
 						local hasTool = breaktype and store.tools[breaktype]
-						-- If a matching tool exists, let the game's own cooldown govern timing (0.3s default),
-						-- which the tool naturally reduces. Only fall back to BreakSpeed if no tool is matched.
 						naturalWait = hasTool and 0.3 or BreakSpeed.Value
 					else
 						naturalWait = BreakSpeed.Value
 					end
 				end
 				task.wait(naturalWait)
-	
+
 				return true
 			end
 		end
-	
+
 		return false
 	end
 	
