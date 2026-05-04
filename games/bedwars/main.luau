@@ -1052,9 +1052,17 @@ run(function()
                     continue
                 end
 
-                local lookDir = (getgenv().breakerRayCheck and (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit) or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
-                local plrangle = math.acos(lookDir:Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit))
-                if plrangle > (math.rad(angle) / 2) then continue end
+                if angle < 360 then
+                    local lookDir = getgenv().breakerRayCheck
+                        and (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1))
+                        or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
+                    if lookDir.Magnitude > 0.01 then lookDir = lookDir.Unit end
+                    local stepDir = (side - node[2]) * Vector3.new(1, 0, 1)
+                    if stepDir.Magnitude > 0.01 then
+                        local stepAngle = math.acos(math.clamp(lookDir:Dot(stepDir.Unit), -1, 1))
+                        if stepAngle > (math.rad(angle) / 2) then continue end
+                    end
+                end
 
                 local curdist = findmag(block, side) + node[1]
                 if curdist < (distances[side] or math.huge) then
