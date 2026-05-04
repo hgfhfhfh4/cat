@@ -1057,10 +1057,12 @@ run(function()
                         and (gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1))
                         or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
                     if lookDir.Magnitude > 0.01 then lookDir = lookDir.Unit end
-                    local stepDir = (side - node[2]) * Vector3.new(1, 0, 1)
-                    if stepDir.Magnitude > 0.01 then
-                        local stepAngle = math.acos(math.clamp(lookDir:Dot(stepDir.Unit), -1, 1))
-                        if stepAngle > (math.rad(angle) / 2) then continue end
+                    -- Check direction from player to this neighbor block (not node-to-neighbor)
+                    -- so only blocks actually in front of the player are considered
+                    local toNeighbor = (block.Position - localPosition) * Vector3.new(1, 0, 1)
+                    if toNeighbor.Magnitude > 0.01 then
+                        local neighborAngle = math.acos(math.clamp(lookDir:Dot(toNeighbor.Unit), -1, 1))
+                        if neighborAngle > (math.rad(angle) / 2) then continue end
                     end
                 end
 
