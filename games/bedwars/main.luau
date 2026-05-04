@@ -1130,6 +1130,32 @@ run(function()
 			local dblock, dpos = getPlacedBlock(pos)
 			if not dblock then return end
 
+			-- LOS check: verify the actual block being hit (dblock) has at least
+			-- one exposed face reachable from the player. This allows breaking through
+			-- layered defenses correctly (path block by block) while preventing
+			-- breaking blocks that are physically unreachable from the player's position.
+			do
+				local origin = entitylib.character.RootPart.Position + Vector3.new(0, 1.5, 0)
+				local losParams = RaycastParams.new()
+				losParams.FilterDescendantsInstances = {lplr.Character, dblock}
+				losParams.FilterType = Enum.RaycastFilterType.Exclude
+				local faceOffsets = {
+					Vector3.new( 1.5, 0, 0), Vector3.new(-1.5, 0, 0),
+					Vector3.new(0,  1.5, 0), Vector3.new(0, -1.5, 0),
+					Vector3.new(0, 0,  1.5), Vector3.new(0, 0, -1.5),
+				}
+				local reachable = false
+				for _, offset in faceOffsets do
+					local facePos = dblock.Position + offset
+					local dir = facePos - origin
+					if not workspace:Raycast(origin, dir, losParams) then
+						reachable = true
+						break
+					end
+				end
+				if not reachable then return end
+			end
+
 			if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.4 then
 				local breaktype = bedwars.ItemMeta[dblock.Name].block.breakType
 				local tool = store.tools[breaktype]
@@ -9598,35 +9624,6 @@ run(function()
 				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
 				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
 				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-
-				-- LOS check: try raycasting to each of the 6 face centers of the block.
-				-- A block is reachable if at least one face has clear line of sight.
-				-- This matches how the game natively determines what you can break.
-				do
-					local origin = entitylib.character.RootPart.Position + Vector3.new(0, 1.5, 0)
-					local losParams = RaycastParams.new()
-					losParams.FilterDescendantsInstances = {lplr.Character, v}
-					losParams.FilterType = Enum.RaycastFilterType.Exclude
-					local faceOffsets = {
-						Vector3.new( 1.5, 0, 0),
-						Vector3.new(-1.5, 0, 0),
-						Vector3.new(0,  1.5, 0),
-						Vector3.new(0, -1.5, 0),
-						Vector3.new(0, 0,  1.5),
-						Vector3.new(0, 0, -1.5),
-					}
-					local reachable = false
-					for _, offset in faceOffsets do
-						local facePos = v.Position + offset
-						local dir = facePos - origin
-						local losHit = workspace:Raycast(origin, dir, losParams)
-						if not losHit then
-							reachable = true
-							break
-						end
-					end
-					if not reachable then continue end
-				end
 	
 				hit += 1
 				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
