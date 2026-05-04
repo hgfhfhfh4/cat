@@ -9453,36 +9453,7 @@ run(function()
 	local AutoTool = {Enabled = false}
 	local RayCheck = {Enabled = false}
 	local customlist, parts = {}, {}
-	local function isBlockVisible(targetPos)
-        if not RayCheck.Enabled then return true end
-        
-        local character = lplr.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
-        
-        local startPos = gameCamera.CFrame.Position -- Use Camera or Eye level for better "legit" feel
-        local direction = (targetPos - startPos)
-        
-        local rayParams = RaycastParams.new()
-        -- Filter out the player and any visual effects
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        rayParams.FilterDescendantsInstances = {character, gameCamera}
-        rayParams.RespectCanCollide = true
-
-        local result = workspace:Raycast(startPos, direction, rayParams)
-        
-        -- If hit something, check if it's the intended block or something in front of it
-        if result then
-            local hitDistance = (result.Position - startPos).Magnitude
-            local targetDistance = direction.Magnitude
-            
-            -- Allow a small margin of error (0.5 studs) for the block itself
-            if hitDistance < (targetDistance - 0.5) then
-                return false -- Something is blocking the view
-            end
-        end
-        
-        return true
-    end
+	
 	local function customHealthbar(self, blockRef, health, maxHealth, changeHealth, block)
 		xpcall(function(): ...any
 			--if block:GetAttribute('NoHealthbar') then return end
@@ -9587,76 +9558,83 @@ run(function()
 	
 	local hit = 0
 	
-local function attemptBreak(tab, localPosition)
-	if not tab then return end
-	local list = {}
-	
-	if RayCheck.Enabled then
-		local camCF = gameCamera.CFrame
-		local camPos = camCF.Position
-		
-		for _, v in tab do
-			-- Calculate direction to the block
-			local blockPos = v.Position
-			local direction = (blockPos - camPos)
-			
-			-- Raycast Params to ignore the player and visual effects
-			local rayParams = RaycastParams.new()
-			rayParams.FilterType = Enum.RaycastFilterType.Exclude
-			rayParams.FilterDescendantsInstances = {lplr.Character, gameCamera}
-			rayParams.RespectCanCollide = true
-			
-			local result = workspace:Raycast(camPos, direction, rayParams)
-			
-			-- LEGIT CHECK: If the ray hits nothing or hits the target block itself, it's valid.
-			-- If it hits something else (like a wall) before the block, it's blocked.
-			if result then
-				local hitDistance = (result.Position - camPos).Magnitude
-				local targetDistance = direction.Magnitude
-				
-				-- If the hit object is the block itself or very close to it, allow it
-				if hitDistance >= (targetDistance - 1.5) then
-					table.insert(list, v)
+	local function attemptBreak(tab, localPosition)
+		if not tab then return end
+
+		local list
+		if RayCheck.Enabled then
+			local camCF = gameCamera.CFrame
+			local camLook = (camCF.LookVector * Vector3.new(1, 0, 1))
+			if camLook.Magnitude > 0.01 then
+				camLook = camLook.Unit
+				local camPos = camCF.Position
+				list = {}
+				for _, v in tab do
+					local toBlock = ((v.Position - camPos) * Vector3.new(1, 0, 1))
+					if toBlock.Magnitude > 0.01 then
+						local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
+						if angle <= 60 then
+							table.insert(list, v)
+						end
+					end
 				end
 			else
-				-- If ray doesn't hit anything (rare for blocks), fallback to insertion
-				table.insert(list, v)
+				list = table.clone(tab)
 			end
+		else
+			list = table.clone(tab)
 		end
-	else
-		list = table.clone(tab)
-	end
 
-	-- Sorting Logic: Priority Health vs Distance
-	if #list > 0 then
-		table.sort(list, function(a, b)
-			if Mode.Value == 'Health' then
-				local aHealth = a:GetAttribute('Health') or 100
-				local bHealth = b:GetAttribute('Health') or 100
-				if aHealth ~= bHealth then
-					return aHealth < bHealth
+		if #list > 1 then
+			pcall(function()
+				table.sort(list, function(a, b)
+					return (localPosition - a.Position).Magnitude <= (localPosition - b.Position).Magnitude
+				end)
+			end)
+		end
+
+		for _, v in list do
+			if (v.Position - localPosition).Magnitude < Range.Value and bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
+				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
+				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
+				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
+	
+				hit += 1
+				local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
+				if path then
+					local currentnode = target
+					for _, part in parts do
+						part.Position = currentnode or Vector3.zero
+						if currentnode then
+							part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+						end
+						currentnode = path[currentnode]
+					end
 				end
-			end
-			-- Fallback to distance sorting if health is equal or Mode is Distance
-			return (localPosition - a.Position).Magnitude < (localPosition - b.Position).Magnitude
-		end)
-	end
 
-	-- Execute the break for the valid list
-	for _, v in list do
-		if (v.Position - localPosition).Magnitude < Range.Value and bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
-			if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
-			if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end 
-			if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-			
-			hit += 1
-			local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
-			
-			-- Since we sorted by health/priority, we break the first valid one and stop if necessary
-			if target then break end 
+				-- Use natural game break cooldown when AutoTool is enabled and a tool is equipped for this block,
+				-- so the tool's speed bonus isn't overwritten by the manual BreakSpeed slider.
+				local naturalWait do
+					if InstantBreak.Enabled then
+						naturalWait = store.damageBlockFail > tick() and 4.5 or 0
+					elseif AutoTool.Enabled then
+						local breaktype = v and bedwars.ItemMeta[v.Name] and bedwars.ItemMeta[v.Name].block and bedwars.ItemMeta[v.Name].block.breakType
+						local hasTool = breaktype and store.tools[breaktype]
+						-- If a matching tool exists, let the game's own cooldown govern timing (0.3s default),
+						-- which the tool naturally reduces. Only fall back to BreakSpeed if no tool is matched.
+						naturalWait = hasTool and 0.3 or BreakSpeed.Value
+					else
+						naturalWait = BreakSpeed.Value
+					end
+				end
+				task.wait(naturalWait)
+	
+				return true
+			end
 		end
+	
+		return false
 	end
-end
 	
 	Breaker = vape.Categories.Minigames:CreateModule({
 		Name = 'Breaker',
