@@ -7209,6 +7209,7 @@ run(function()
     local Bedfinder
     local UseBlacklist
     local Blacklist
+    local FullyBoxed
 
     local function getBlocks()
         local blocks = {}
@@ -7235,22 +7236,36 @@ run(function()
     end
 
     local function getShell()
-        -- Full 3x3 border at ground (y=0) and mid (y=3), plus ceiling (y=6).
-        -- All offsets are relative to foot level (already adjusted below).
-        local pattern = {}
-        for x = -3, 3, 3 do
-            for z = -3, 3, 3 do
-                if x == 0 and z == 0 then continue end
-                table.insert(pattern, Vector3.new(x, 0, z))
-                table.insert(pattern, Vector3.new(x, 3, z))
+        if FullyBoxed and FullyBoxed.Enabled then
+            -- Full 3x3 border at ground (y=0), mid (y=3), and ceiling (y=6)
+            local pattern = {}
+            for x = -3, 3, 3 do
+                for z = -3, 3, 3 do
+                    if x == 0 and z == 0 then continue end
+                    table.insert(pattern, Vector3.new(x, 0, z))
+                    table.insert(pattern, Vector3.new(x, 3, z))
+                end
             end
-        end
-        for x = -3, 3, 3 do
-            for z = -3, 3, 3 do
-                table.insert(pattern, Vector3.new(x, 6, z))
+            for x = -3, 3, 3 do
+                for z = -3, 3, 3 do
+                    table.insert(pattern, Vector3.new(x, 6, z))
+                end
             end
+            return pattern
+        else
+            -- Cardinal only: front, back, left, right at ground + mid, plus top
+            return {
+                Vector3.new( 3, 0,  0),
+                Vector3.new(-3, 0,  0),
+                Vector3.new( 0, 0,  3),
+                Vector3.new( 0, 0, -3),
+                Vector3.new( 3, 3,  0),
+                Vector3.new(-3, 3,  0),
+                Vector3.new( 0, 3,  3),
+                Vector3.new( 0, 3, -3),
+                Vector3.new( 0, 6,  0),
+            }
         end
-        return pattern
     end
 
     BlockIn = vape.Categories.World:CreateModule({
@@ -7370,6 +7385,10 @@ run(function()
     })
 
     SilentAim = BlockIn:CreateToggle({Name = 'SilentAim'})
+    FullyBoxed = BlockIn:CreateToggle({
+        Name = 'Fully Boxed',
+        Tooltip = 'Place blocks on all sides including diagonals'
+    })
     Bedfinder = BlockIn:CreateToggle({Name = 'Bed finder'})
     UseBlacklist = BlockIn:CreateToggle({
         Name = 'Use blacklist',
