@@ -7210,6 +7210,7 @@ run(function()
     local UseBlacklist
     local Blacklist
     local FullyBoxed
+    local Reinforce
 
     local function getBlocks()
         local blocks = {}
@@ -7284,67 +7285,81 @@ run(function()
                     end
                 end))
 
-                if selfpos then
+                local function doPlace()
+                    selfpos = entitylib.isAlive and entitylib.character.RootPart.Position or nil
+                    if not selfpos then return end
                     rayCheck.FilterDescendantsInstances = {lplr.Character, gameCamera}
 
                     if Bedfinder.Enabled and not getBed() then
                         notif('BlockIn', 'No bed found', 2, 'warning')
-                    else
-                        if PlaceMode.Value == 'Smart' then
-                            local placement = workspace:Raycast(selfpos - Vector3.new(0, 1, 0), entitylib.character.RootPart.CFrame.LookVector * 4, rayCheck)
+                        return
+                    end
 
-                            if placement then
-                                local pos = placement.Instance.Position
-                                local rounded = roundPos(pos)
-                                local oldSlot = store.hand and store.hand.tool and getHotbar(store.hand.tool)
-
-                                repeat
-                                    task.spawn(bedwars.breakBlock, placement.Instance, false, nil, true, true)
-                                    task.wait(BreakSpeed.Value)
-                                until not getPlacedBlock(rounded) or not BlockIn.Enabled
-
-                                if oldSlot then
-                                    hotbarSwitch(oldSlot)
-                                end
-
-                                if BlockIn.Enabled then
-                                    selfpos = entitylib.character.RootPart.Position
-                                end
-                            end
-                        end
-
-                        local blocks = getBlocks()
-                        for i, block in blocks do
-                            for index, v in store.inventory.hotbar do
-                                if v.item and v.item.tool == block[3] and index ~= (store.inventory.hotbarSlot + 1) then
-                                    hotbarSwitch(index - 1)
-                                    break
-                                end
-                            end
-                            local pattern = getShell()
-
-                            for i2, pos in pattern do
-                                -- Use foot-level origin so blocks land on the ground, not at torso height
-                                local footPos = roundPos(entitylib.character.RootPart.Position - Vector3.new(0, 3, 0))
-                                local placePos = footPos + pos
-                                if getPlacedBlock(placePos) then continue end
-                                if SilentAim.Enabled then
-                                    lookAt = CFrame.new(placePos)
-                                end
-                                task.spawn(bedwars.placeBlock, placePos, block[1], false)
-                                local delay = PlaceDelay:GetRandomValue()
-                                task.wait(math.max(delay, 0))
-                                lookAt = nil
-                            end
-                        end
-
-                        if #blocks < 1 then
-                            notif('BlockIn', 'Missing blocks', 4, 'warning')
+                    if PlaceMode.Value == 'Smart' then
+                        local placement = workspace:Raycast(selfpos - Vector3.new(0, 1, 0), entitylib.character.RootPart.CFrame.LookVector * 4, rayCheck)
+                        if placement then
+                            local pos = placement.Instance.Position
+                            local rounded = roundPos(pos)
+                            local oldSlot = store.hand and store.hand.tool and getHotbar(store.hand.tool)
+                            repeat
+                                task.spawn(bedwars.breakBlock, placement.Instance, false, nil, true, true)
+                                task.wait(BreakSpeed.Value)
+                            until not getPlacedBlock(rounded) or not BlockIn.Enabled
+                            if oldSlot then hotbarSwitch(oldSlot) end
                         end
                     end
+
+                    local blocks = getBlocks()
+                    if #blocks < 1 then
+                        notif('BlockIn', 'Missing blocks', 4, 'warning')
+                        return
+                    end
+
+                    -- Remember what was held so we can restore it after placing
+                    local prevTool = store.hand and store.hand.tool
+
+                    for i, block in blocks do
+                        -- Find and switch to the block in hotbar
+                        for index, v in store.inventory.hotbar do
+                            if v.item and v.item.tool == block[3] and index ~= (store.inventory.hotbarSlot + 1) then
+                                hotbarSwitch(index - 1)
+                                break
+                            end
+                        end
+                        local pattern = getShell()
+                        for i2, pos in pattern do
+                            if not BlockIn.Enabled then break end
+                            local footPos = roundPos(entitylib.character.RootPart.Position - Vector3.new(0, 3, 0))
+                            local placePos = footPos + pos
+                            if getPlacedBlock(placePos) then continue end
+                            if SilentAim.Enabled then
+                                lookAt = CFrame.new(placePos)
+                            end
+                            task.spawn(bedwars.placeBlock, placePos, block[1], false)
+                            local delay = PlaceDelay:GetRandomValue()
+                            task.wait(math.max(delay, 0))
+                            lookAt = nil
+                        end
+                    end
+
+                    -- Restore previously held tool
+                    if prevTool then
+                        local prevSlot = getHotbar(prevTool)
+                        if prevSlot then hotbarSwitch(prevSlot) end
+                    end
                 end
-                if BlockIn.Enabled then
-                    BlockIn:Toggle()
+
+                if Reinforce.Enabled then
+                    -- Keep running: re-check every 0.5s for missing blocks and refill them
+                    repeat
+                        doPlace()
+                        task.wait(0.5)
+                    until not BlockIn.Enabled
+                else
+                    doPlace()
+                    if BlockIn.Enabled then
+                        BlockIn:Toggle()
+                    end
                 end
             end
         end,
@@ -7388,6 +7403,10 @@ run(function()
     FullyBoxed = BlockIn:CreateToggle({
         Name = 'Fully Boxed',
         Tooltip = 'Place blocks on all sides including diagonals'
+    })
+    Reinforce = BlockIn:CreateToggle({
+        Name = 'Reinforce',
+        Tooltip = 'Continuously refill missing blocks until toggled off'
     })
     Bedfinder = BlockIn:CreateToggle({Name = 'Bed finder'})
     UseBlacklist = BlockIn:CreateToggle({
