@@ -1053,8 +1053,13 @@ run(function()
                 end
 
                 local lookDir = getgenv().breakerDigDir or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
-                local plrangle = math.acos(math.clamp((lookDir.Magnitude > 0.01 and lookDir.Unit or lookDir):Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit), -1, 1))
-                if plrangle > (math.rad(angle) / 2) then continue end
+                -- Only apply traversal angle filter when RayCheck is NOT active.
+                -- When breakerDigDir is set, we filter air entry cells instead (below),
+                -- so the path can traverse the full defense freely.
+                if not getgenv().breakerDigDir then
+                    local plrangle = math.acos(math.clamp((lookDir.Magnitude > 0.01 and lookDir.Unit or lookDir):Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit), -1, 1))
+                    if plrangle > (math.rad(angle) / 2) then continue end
+                end
 
                 local curdist = findmag(block, side) + node[1]
                 if curdist < (distances[side] or math.huge) then
@@ -1066,7 +1071,19 @@ run(function()
         end
 
         local pos, cost = nil, math.huge
+        local digDir = getgenv().breakerDigDir
         for node in air do
+            -- When RayCheck is active (breakerDigDir set), only accept air entry cells
+            -- that are on the facing side of the wall — i.e. the air cell is in front of
+            -- the player along the camera look direction. This correctly picks the front
+            -- face regardless of distance or wall height.
+            if digDir and digDir.Magnitude > 0.01 then
+                local toCell = (node - localPosition) * Vector3.new(1, 0, 1)
+                if toCell.Magnitude > 0.01 then
+                    local dot = digDir.Unit:Dot(toCell.Unit)
+                    if dot < 0.5 then continue end -- not in front half
+                end
+            end
             if distances[node] < cost then
                 pos, cost = node, distances[node]
             end
