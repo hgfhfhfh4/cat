@@ -9627,25 +9627,12 @@ run(function()
 
 		hit += 1
 
-		-- Set dig direction from camera raycast entry point so calculatePath
-		-- routes the path from whichever side the player is facing
+		-- Set dig direction from flat camera look so calculatePath routes
+		-- the path entry from the side the player is facing
 		if RayCheck.Enabled then
-			local camCF = gameCamera.CFrame
-			local rayParams = RaycastParams.new()
-			rayParams.FilterDescendantsInstances = {lplr.Character}
-			rayParams.FilterType = Enum.RaycastFilterType.Exclude
-			local rayResult = workspace:Raycast(camCF.Position, camCF.LookVector * Range.Value, rayParams)
-			if rayResult then
-				local digDir = (rayResult.Position - localPosition) * Vector3.new(1, 0, 1)
-				if digDir.Magnitude > 0.01 then
-					getgenv().breakerDigDir = digDir.Unit
-				end
-			else
-				-- No hit but we have a locked target — use direction to target
-				local digDir = (v.Position - localPosition) * Vector3.new(1, 0, 1)
-				if digDir.Magnitude > 0.01 then
-					getgenv().breakerDigDir = digDir.Unit
-				end
+			local camLook = gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1)
+			if camLook.Magnitude > 0.01 then
+				getgenv().breakerDigDir = camLook.Unit
 			end
 		end
 
