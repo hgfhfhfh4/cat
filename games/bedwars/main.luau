@@ -1052,7 +1052,8 @@ run(function()
                     continue
                 end
 
-                local plrangle = math.acos(math.clamp((entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)):Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit), -1, 1))
+                local lookDir = getgenv().breakerDigDir or (entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1))
+                local plrangle = math.acos(math.clamp((lookDir.Magnitude > 0.01 and lookDir.Unit or lookDir):Dot(((block.Position - localPosition) * Vector3.new(1, 0, 1)).Unit), -1, 1))
                 if plrangle > (math.rad(angle) / 2) then continue end
 
                 local curdist = findmag(block, side) + node[1]
@@ -9558,6 +9559,8 @@ run(function()
 	
 	local hit = 0
 	
+	local lockedTarget = nil
+
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
 
@@ -9571,61 +9574,109 @@ run(function()
 			end)
 		end
 
-		for _, v in list do
-			if (v.Position - localPosition).Magnitude < Range.Value and bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
-				if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
-				if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
-				if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-
-			hit += 1
-
-				if RayCheck.Enabled then
-					-- Raycast straight from camera in look direction.
-					-- Break whatever placed block is hit first — this is exactly what a legit player does.
-					local camCF = gameCamera.CFrame
-					local rayParams = RaycastParams.new()
-					rayParams.FilterDescendantsInstances = {lplr.Character}
-					rayParams.FilterType = Enum.RaycastFilterType.Exclude
-					local rayResult = workspace:Raycast(camCF.Position, camCF.LookVector * Range.Value, rayParams)
-					if rayResult then
-						local hitBlock, hitPos = getPlacedBlock(rayResult.Instance.Position)
-						if hitBlock and bedwars.BlockController:isBlockBreakable({blockPosition = hitPos}, lplr) then
-							bedwars.breakBlock(hitBlock, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, 360)
-						end
-					end
-				else
-					getgenv().breakerRayCheck = false
-					local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, Angle.Value)
-					if path then
-						local currentnode = target
-						for _, part in parts do
-							part.Position = currentnode or Vector3.zero
-							if currentnode then
-								part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+		-- Pick which bed/target to pursue
+		local target_v = nil
+		if RayCheck.Enabled then
+			-- Keep locked target if still valid
+			if lockedTarget and lockedTarget.Parent and table.find(list, lockedTarget) then
+				target_v = lockedTarget
+			else
+				-- Pick closest target within 45° cone of camera
+				lockedTarget = nil
+				local camCF = gameCamera.CFrame
+				local camLook = (camCF.LookVector * Vector3.new(1, 0, 1))
+				if camLook.Magnitude > 0.01 then
+					camLook = camLook.Unit
+					local camPos = camCF.Position
+					for _, v in list do
+						local toBlock = (v.Position - camPos) * Vector3.new(1, 0, 1)
+						if toBlock.Magnitude > 0.01 then
+							local angle = math.deg(math.acos(math.clamp(camLook:Dot(toBlock.Unit), -1, 1)))
+							if angle <= 45 then
+								lockedTarget = v
+								target_v = v
+								break -- list is already sorted by distance, take first
 							end
-							currentnode = path[currentnode]
 						end
 					end
 				end
-
-				local naturalWait do
-					if InstantBreak.Enabled then
-						naturalWait = store.damageBlockFail > tick() and 4.5 or 0
-					elseif AutoTool.Enabled then
-						local breaktype = v and bedwars.ItemMeta[v.Name] and bedwars.ItemMeta[v.Name].block and bedwars.ItemMeta[v.Name].block.breakType
-						local hasTool = breaktype and store.tools[breaktype]
-						naturalWait = hasTool and 0.3 or BreakSpeed.Value
-					else
-						naturalWait = BreakSpeed.Value
-					end
+			end
+			if not target_v then
+				getgenv().breakerDigDir = nil
+				return false
+			end
+		else
+			getgenv().breakerDigDir = nil
+			lockedTarget = nil
+			-- No RayCheck: use closest valid target
+			for _, v in list do
+				if (v.Position - localPosition).Magnitude < Range.Value then
+					target_v = v
+					break
 				end
-				task.wait(naturalWait)
+			end
+			if not target_v then return false end
+		end
 
-				return true
+		local v = target_v
+		if (v.Position - localPosition).Magnitude >= Range.Value then return false end
+		if not bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then return false end
+		if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then return false end
+		if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then return false end
+		if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then return false end
+
+		hit += 1
+
+		-- Set dig direction from camera raycast entry point so calculatePath
+		-- routes the path from whichever side the player is facing
+		if RayCheck.Enabled then
+			local camCF = gameCamera.CFrame
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = {lplr.Character}
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+			local rayResult = workspace:Raycast(camCF.Position, camCF.LookVector * Range.Value, rayParams)
+			if rayResult then
+				local digDir = (rayResult.Position - localPosition) * Vector3.new(1, 0, 1)
+				if digDir.Magnitude > 0.01 then
+					getgenv().breakerDigDir = digDir.Unit
+				end
+			else
+				-- No hit but we have a locked target — use direction to target
+				local digDir = (v.Position - localPosition) * Vector3.new(1, 0, 1)
+				if digDir.Magnitude > 0.01 then
+					getgenv().breakerDigDir = digDir.Unit
+				end
 			end
 		end
 
-		return false
+		local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, InstantBreak.Enabled, AutoTool.Enabled, Mode.Value, RayCheck.Enabled and 90 or Angle.Value)
+		getgenv().breakerDigDir = nil
+
+		if path then
+			local currentnode = target
+			for _, part in parts do
+				part.Position = currentnode or Vector3.zero
+				if currentnode then
+					part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
+				end
+				currentnode = path[currentnode]
+			end
+		end
+
+		local naturalWait do
+			if InstantBreak.Enabled then
+				naturalWait = store.damageBlockFail > tick() and 4.5 or 0
+			elseif AutoTool.Enabled then
+				local breaktype = v and bedwars.ItemMeta[v.Name] and bedwars.ItemMeta[v.Name].block and bedwars.ItemMeta[v.Name].block.breakType
+				local hasTool = breaktype and store.tools[breaktype]
+				naturalWait = hasTool and 0.3 or BreakSpeed.Value
+			else
+				naturalWait = BreakSpeed.Value
+			end
+		end
+		task.wait(naturalWait)
+
+		return true
 	end
 	
 	Breaker = vape.Categories.Minigames:CreateModule({
