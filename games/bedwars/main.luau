@@ -7274,7 +7274,7 @@ run(function()
             end
             return pattern
         else
-            -- Cardinal only: front, back, left, right at all 3 heights + full ceiling
+            -- Cardinal only: front, back, left, right at all 3 heights + ceiling above head
             return {
                 -- ground level (feet)
                 Vector3.new( 3, 0,  0),
@@ -7286,12 +7286,12 @@ run(function()
                 Vector3.new(-3, 3,  0),
                 Vector3.new( 0, 3,  3),
                 Vector3.new( 0, 3, -3),
-                -- ceiling
+                -- ceiling (above head, not at head level)
                 Vector3.new( 3, 6,  0),
                 Vector3.new(-3, 6,  0),
                 Vector3.new( 0, 6,  3),
                 Vector3.new( 0, 6, -3),
-                Vector3.new( 0, 6,  0),
+                Vector3.new( 0, 9,  0),
             }
         end
     end
