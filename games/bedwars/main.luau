@@ -1027,7 +1027,7 @@ run(function()
 		Source: https://stackoverflow.com/questions/39355587/speeding-up-dijkstras-algorithm-to-solve-a-3d-maze
 	]]
 	calculatePath = function(target, blockpos, findmag, angle)
-        if cache[blockpos] and cache[blockpos][4] > tick() then
+        if not getgenv().breakerDigDir and cache[blockpos] and cache[blockpos][4] > tick() then
             return unpack(cache[blockpos])
         end
 
@@ -1090,12 +1090,14 @@ run(function()
         end
 
         if pos then
-            cache[blockpos] = {
-                pos,
-                cost,
-                path,
-                tick() + 1
-            }
+            if not getgenv().breakerDigDir then
+                cache[blockpos] = {
+                    pos,
+                    cost,
+                    path,
+                    tick() + 1
+                }
+            end
             return pos, cost, path
         end
 
