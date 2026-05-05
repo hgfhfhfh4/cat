@@ -9584,8 +9584,7 @@ run(function()
 	end
 	
 	local hit = 0
-	
-	local lockedTarget = nil
+	local lockedTarget = nil -- RayCheck: locked bed/target instance, never re-picked while alive and in range
 
 	local function attemptBreak(tab, localPosition)
 		if not tab then return end
@@ -9600,15 +9599,22 @@ run(function()
 			end)
 		end
 
-		-- Pick which bed/target to pursue
 		local target_v = nil
 		if RayCheck.Enabled then
-			-- Keep locked target if still valid
-			if lockedTarget and lockedTarget.Parent and table.find(list, lockedTarget) then
-				target_v = lockedTarget
-			else
-				-- Pick closest target within 45° cone of camera
-				lockedTarget = nil
+			-- Validate existing lock: must still exist, be in the list, and be in range
+			if lockedTarget then
+				local stillValid = lockedTarget.Parent ~= nil
+					and table.find(list, lockedTarget)
+					and (lockedTarget.Position - localPosition).Magnitude < Range.Value
+				if stillValid then
+					target_v = lockedTarget
+				else
+					lockedTarget = nil
+				end
+			end
+
+			-- Only pick a new target if we have no lock at all
+			if not lockedTarget then
 				local camCF = gameCamera.CFrame
 				local camLook = (camCF.LookVector * Vector3.new(1, 0, 1))
 				if camLook.Magnitude > 0.01 then
@@ -9621,12 +9627,13 @@ run(function()
 							if angle <= 45 then
 								lockedTarget = v
 								target_v = v
-								break -- list is already sorted by distance, take first
+								break
 							end
 						end
 					end
 				end
 			end
+
 			if not target_v then
 				getgenv().breakerDigDir = nil
 				return false
@@ -9634,7 +9641,6 @@ run(function()
 		else
 			getgenv().breakerDigDir = nil
 			lockedTarget = nil
-			-- No RayCheck: use closest valid target
 			for _, v in list do
 				if (v.Position - localPosition).Magnitude < Range.Value then
 					target_v = v
@@ -9653,8 +9659,6 @@ run(function()
 
 		hit += 1
 
-		-- Set dig direction from flat camera look so calculatePath routes
-		-- the path entry from the side the player is facing
 		if RayCheck.Enabled then
 			local camLook = gameCamera.CFrame.LookVector * Vector3.new(1, 0, 1)
 			if camLook.Magnitude > 0.01 then
