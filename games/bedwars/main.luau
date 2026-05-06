@@ -4089,6 +4089,7 @@ run(function()
 	local List
 	local RequireBow
 	local AnimationToggle
+	local AuraPrediction
 	local rayCheck = RaycastParams.new()
 	rayCheck.FilterType = Enum.RaycastFilterType.Include
 	local projectileRemote = {InvokeServer = function(self, ...) end}
@@ -4151,9 +4152,9 @@ run(function()
 									-- Offset shoot origin the same way the aimbot does
 									local offsetpos = pos + (projmeta.fromPositionOffset or Vector3.zero)
 									local newlook = CFrame.new(offsetpos, ent.RootPart.Position) * CFrame.new(Vector3.new(bedwars.BowConstantsTable.RelX, bedwars.BowConstantsTable.RelY, bedwars.BowConstantsTable.RelZ))
-									-- Ping-compensated speed so shot lands where target will be
+									-- Ping-compensated speed matching aimbot formula exactly
 									local ping = lplr:GetNetworkPing()
-									local calc = prediction.SolveTrajectory(newlook.p, projSpeed - ping * projSpeed, gravity, ent.RootPart.Position, ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, ent.Jumping and 42.6 or nil, rayCheck)
+									local calc = prediction.SolveTrajectory(newlook.p, projSpeed * (AuraPrediction.Value - ping), gravity, ent.RootPart.Position, ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, ent.Jumping and 42.6 or nil, rayCheck)
 									if calc then
 										targetinfo.Targets[ent] = tick() + 1
 										local switched = switchItem(item.tool)
@@ -4232,6 +4233,14 @@ run(function()
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
+	})
+	AuraPrediction = ProjectileAura:CreateSlider({
+		Name = 'Prediction',
+		Min = 0.1,
+		Max = 2,
+		Default = 1,
+		Decimal = 10,
+		Tooltip = 'Increase if shots land behind target, decrease if ahead'
 	})
 	RequireBow = ProjectileAura:CreateToggle({
 		Name = 'Require Bow',
