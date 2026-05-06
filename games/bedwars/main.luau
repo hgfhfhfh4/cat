@@ -4140,28 +4140,36 @@ run(function()
 						if ent then
 							local pos = entitylib.character.RootPart.Position
 							for _, data in getProjectiles() do
-								local item, ammo, projectile, itemMeta = unpack(data)
+								local item, ammo, projectile, projmeta = unpack(data)
 								if (FireDelays[item.itemType] or 0) < tick() then
 									-- Require Bow: only fire if the matching weapon is currently held
 									if RequireBow.Enabled and (not store.hand.tool or store.hand.tool ~= item.tool) then continue end
 									rayCheck.FilterDescendantsInstances = {workspace.Map}
 									local meta = bedwars.ProjectileMeta[projectile]
-									local projSpeed, gravity = meta.launchVelocity, meta.gravitationalAcceleration or 196.2
-									local calc = prediction.SolveTrajectory(pos, projSpeed, gravity, ent.RootPart.Position, ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, ent.Jumping and 42.6 or nil, rayCheck)
+									local projSpeed = meta.launchVelocity
+									local gravity = (meta.gravitationalAcceleration or 196.2) * (projmeta.gravityMultiplier or 1)
+									-- Offset shoot origin the same way the aimbot does
+									local offsetpos = pos + (projmeta.fromPositionOffset or Vector3.zero)
+									local newlook = CFrame.new(offsetpos, ent.RootPart.Position) * CFrame.new(Vector3.new(bedwars.BowConstantsTable.RelX, bedwars.BowConstantsTable.RelY, bedwars.BowConstantsTable.RelZ))
+									-- Ping-compensated speed so shot lands where target will be
+									local ping = lplr:GetNetworkPing()
+									local calc = prediction.SolveTrajectory(newlook.p, projSpeed - ping * projSpeed, gravity, ent.RootPart.Position, ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, ent.Jumping and 42.6 or nil, rayCheck)
 									if calc then
 										targetinfo.Targets[ent] = tick() + 1
 										local switched = switchItem(item.tool)
-	
+
 										task.spawn(function()
-											local dir, id = CFrame.lookAt(pos, calc).LookVector, httpService:GenerateGUID(true)
-											local shootPosition = (CFrame.new(pos, calc) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ))).Position
+											-- Shoot direction and position both from newlook origin for consistency
+											local shootPosition = newlook.p
+											local dir = CFrame.new(shootPosition, calc).LookVector
+											local id = httpService:GenerateGUID(true)
+											local drawDuration = projmeta.drawDurationSeconds or 1
 
 											if AnimationToggle.Enabled then
 												local char = lplr.Character
 												local humanoid = char and char:FindFirstChildOfClass('Humanoid')
 												local animator = humanoid and humanoid:FindFirstChildOfClass('Animator')
 												if animator then
-													-- Play charge/draw animation
 													local chargeAnim = Instance.new('Animation')
 													chargeAnim.AnimationId = 'rbxassetid://15222797648'
 													local chargeTrack = animator:LoadAnimation(chargeAnim)
@@ -4169,7 +4177,6 @@ run(function()
 													task.wait(meta.drawDurationSeconds or 1)
 													chargeTrack:Stop()
 													chargeAnim:Destroy()
-													-- Play shoot/release animation
 													local shootAnim = Instance.new('Animation')
 													shootAnim.AnimationId = 'rbxassetid://8860294521'
 													local shootTrack = animator:LoadAnimation(shootAnim)
@@ -4181,8 +4188,8 @@ run(function()
 												end
 											end
 
-											bedwars.ProjectileController:createLocalProjectile(meta, ammo, projectile, shootPosition, id, dir * projSpeed, {drawDurationSeconds = 1})
-											local res = projectileRemote:InvokeServer(item.tool, ammo, projectile, shootPosition, pos, dir * projSpeed, id, {drawDurationSeconds = 1, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - 0.045)
+											bedwars.ProjectileController:createLocalProjectile(meta, ammo, projectile, shootPosition, id, dir * projSpeed, {drawDurationSeconds = drawDuration})
+											local res = projectileRemote:InvokeServer(item.tool, ammo, projectile, shootPosition, pos, dir * projSpeed, id, {drawDurationSeconds = drawDuration, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - ping)
 											if not res then
 												FireDelays[item.itemType] = tick()
 											else
@@ -4193,8 +4200,8 @@ run(function()
 												end
 											end
 										end)
-	
-										FireDelays[item.itemType] = tick() + itemMeta.fireDelaySec
+
+										FireDelays[item.itemType] = tick() + (projmeta.fireDelaySec or itemMeta and itemMeta.fireDelaySec or 0.5)
 										if switched then
 											task.wait(0.05)
 										end
